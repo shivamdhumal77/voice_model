@@ -33,8 +33,6 @@ RUN git clone https://github.com/suno-ai/bark && cd bark && pip install .
 COPY nltk.txt /app/nltk.txt
 
 # Download NLTK resources during build
-RUN python -c "import nltk; nltk.data.path.append('/app/nltk_data'); \
-    [nltk.download(resource.strip(), download_dir='/app/nltk_data') for resource in open('/app/nltk.txt') if resource.strip()]"
 
 # Copy the application code into the container
 COPY app/ ./app
