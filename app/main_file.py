@@ -1,23 +1,58 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-import threading
 import subprocess
+import io
 import numpy as np
+import torch
+import warnings
+from transformers import AutoProcessor, BarkModel
+from tokenizers import Tokenizer
 import whisper
-from queue import Queue
+import sounddevice as sd
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationChain
 from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from text_to_speech import TextToSpeechService
-import io
 from pydantic import BaseModel
+
+warnings.filterwarnings(
+    "ignore",
+    message="torch.nn.utils.weight_norm is deprecated in favor of torch.nn.utils.parametrizations.weight_norm.",
+)
 
 # Initialize FastAPI app
 app = FastAPI()
 
 # Initialize models and services
 stt = whisper.load_model("base.en")
+
+class TextToSpeechService:
+    def __init__(self, device: str = "cuda" if torch.cuda.is_available() else "cpu"):
+        self.device = device
+        self.processor = AutoProcessor.from_pretrained("suno/bark-small")
+        self.model = BarkModel.from_pretrained("suno/bark-small")
+        self.model.to(self.device)
+        self.tokenizer = Tokenizer.from_pretrained("bert-base-uncased")
+
+    def synthesize(self, text: str, voice_preset: str = "v2/en_speaker_1"):
+        inputs = self.processor(text, voice_preset=voice_preset, return_tensors="pt")
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        with torch.no_grad():
+            audio_array = self.model.generate(**inputs, pad_token_id=10000)
+        audio_array = audio_array.cpu().numpy().squeeze()
+        sample_rate = self.model.generation_config.sample_rate
+        return sample_rate, audio_array
+
+    def long_form_synthesize(self, text: str, voice_preset: str = "v2/en_speaker_1"):
+        pieces = []
+        silence = np.zeros(int(0.25 * self.model.generation_config.sample_rate))
+        tokens = self.tokenizer.encode(text)
+        sentences = tokens.tokens
+        for sent in sentences:
+            sample_rate, audio_array = self.synthesize(sent, voice_preset)
+            pieces += [audio_array, silence.copy()]
+        return self.model.generation_config.sample_rate, np.concatenate(pieces)
+
 tts = TextToSpeechService()
 
 # Initialize LLM (Athene-v2)
@@ -47,15 +82,16 @@ chain = ConversationChain(
     llm=llm,
 )
 
-# Utility functions
-def record_audio_with_ffmpeg(output_file="recording.wav", duration=10):
+# Utility Functions
+def record_audio_with_ffmpeg(output_file="recording.wav", silence_duration=3):
     """
-    Records audio using FFmpeg and saves it to a file.
+    Continuously records audio until silence is detected for a specified duration.
     """
     try:
         command = [
             "ffmpeg", "-y", "-f", "alsa", "-i", "default",
-            "-t", str(duration), output_file
+            "-af", f"silencedetect=n=-30dB:d={silence_duration}",
+            output_file
         ]
         subprocess.run(command, check=True)
         return output_file
@@ -84,51 +120,38 @@ def get_llm_response(text: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM response generation failed: {e}")
 
-def synthesize_speech(text: str) -> io.BytesIO:
+def play_audio(audio_array: np.ndarray, sample_rate: int):
     """
-    Synthesizes speech and returns the audio as a file in memory (WAV format).
+    Plays the audio array using sounddevice and waits for playback to complete.
     """
-    try:
-        sample_rate, audio_array = tts.long_form_synthesize(text)
-        audio_io = io.BytesIO()
-        audio_io.write(audio_array.tobytes())
-        audio_io.seek(0)  # Reset file pointer
-        return audio_io
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Text-to-speech synthesis failed: {e}")
-
-# Data model
-class Message(BaseModel):
-    text: str
-
-@app.on_event("startup")
-async def startup_event():
-    """
-    On startup, send the initial "Hello" text.
-    """
-    initial_text = "Hello"
-    print(f"You: {initial_text}")
-    response = get_llm_response(initial_text)
-    print(f"Assistant: {response}")
-    audio_io = synthesize_speech(response)
-    # Just an example, you may want to save or play the audio here
+    sd.play(audio_array, samplerate=sample_rate)
+    sd.wait()
 
 @app.post("/process")
-async def process_audio(background_tasks: BackgroundTasks):
+async def process_audio():
     """
-    Processes audio from the microphone, transcribes it, generates a response, and synthesizes speech.
+    Processes audio from the microphone, transcribes it, generates a response, synthesizes speech,
+    plays the response, and loops for conversational interaction.
     """
-    print("Listening... Speak into the microphone.")
-    
-    # Record audio using FFmpeg
-    audio_file = record_audio_with_ffmpeg()
+    while True:
+        print("Listening... Speak into the microphone.")
 
-    # Process the recorded audio
-    text = transcribe_audio(audio_file)
-    print(f"You: {text}")
+        # Record audio using FFmpeg
+        audio_file = record_audio_with_ffmpeg()
 
-    response = get_llm_response(text)
-    print(f"Assistant: {response}")
+        # Process the recorded audio
+        text = transcribe_audio(audio_file)
+        print(f"You: {text}")
 
-    audio_io = synthesize_speech(response)
-    return StreamingResponse(audio_io, media_type="audio/wav")
+        # Generate response from the LLM
+        response = get_llm_response(text)
+        print(f"Assistant: {response}")
+
+        # Synthesize speech from the LLM's response
+        sample_rate, audio_array = tts.long_form_synthesize(response)
+
+        # Play the TTS output and wait for it to finish
+        print("Playing response...")
+        play_audio(audio_array, sample_rate)
+
+        # Continue listening for the next input
