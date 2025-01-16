@@ -75,6 +75,7 @@ safetensors
 scipy==1.12.0
 six==1.16.0
 sounddevice
+sound
 SpeechRecognition
 SQLAlchemy==2.0.29
 suno-bark
