@@ -17,22 +17,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container
-COPY requirements.txt .
+COPY requirements.txt . 
 
-# Install Python dependencies from requirements.txt
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Hugging Face Transformers from GitHub repository
+# Install additional necessary Python libraries for TTS and other tasks
+RUN pip install --no-cache-dir phonemizer torch transformers scipy munch
+
+# Install transformers and Bark
 RUN pip install git+https://github.com/huggingface/transformers.git
+RUN git clone https://github.com/suno-ai/bark && cd bark && pip install .
 
-# Clone the Bark repository and install it
-RUN git clone https://github.com/suno-ai/bark && \
-    cd bark && \
-    pip install .
+# Copy nltk.txt to the container
+COPY nltk.txt /app/nltk.txt
 
-# Clone the TTS dependencies (if applicable)
-# If you have a GitHub repo for TTS, uncomment and modify this:
-# RUN git clone https://github.com/your-username/your-tts-repo.git /app/tts
+# Download NLTK resources during build
+RUN python -c "import nltk; nltk.data.path.append('/app/nltk_data'); \
+    [nltk.download(resource.strip(), download_dir='/app/nltk_data') for resource in open('/app/nltk.txt') if resource.strip()]"
 
 # Copy the application code into the container
 COPY app/ ./app
