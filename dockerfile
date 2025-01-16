@@ -37,7 +37,7 @@ RUN pip install --no-cache-dir phonemizer torch transformers scipy munch soundde
 
 RUN apt-get update
 RUN apt-get install libasound-dev libportaudio2 libportaudiocpp0 portaudio19-dev -y
-RUN pip install pyaudio soundevice
+RUN pip install pyaudio sounddevice
 RUN apt-get install gcc -y
 
 # Install transformers and Bark into the virtual environment
