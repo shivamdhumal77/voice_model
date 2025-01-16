@@ -35,6 +35,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install additional necessary Python libraries for TTS and other tasks into the virtual environment
 RUN pip install --no-cache-dir phonemizer torch transformers scipy munch sounddevice
 
+RUN apt-get update
+RUN apt-get install libasound-dev libportaudio2 libportaudiocpp0 portaudio19-dev -y
+RUN pip install pyaudio soundevice
+RUN apt-get install gcc -y
+
 # Install transformers and Bark into the virtual environment
 RUN pip install git+https://github.com/huggingface/transformers.git
 RUN git clone https://github.com/suno-ai/bark /app/bark && \
