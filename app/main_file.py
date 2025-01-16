@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 import threading
 import time
@@ -12,6 +12,7 @@ from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from test_to_speech_1 import TextToSpeechService
 import io
+from pydantic import BaseModel
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -104,7 +105,7 @@ def synthesize_speech(text: str) -> io.BytesIO:
     try:
         sample_rate, audio_array = tts.long_form_synthesize(text)
         audio_io = io.BytesIO()
-        sd.write(audio_io, audio_array, sample_rate, format="WAV")
+        audio_io.write(audio_array.tobytes())
         audio_io.seek(0)  # Reset file pointer
         return audio_io
     except Exception as e:
@@ -125,7 +126,6 @@ async def startup_event():
     print(f"Assistant: {response}")
     audio_io = synthesize_speech(response)
     # Just an example, you may want to save or play the audio here
-    play_audio(audio_io)
 
 @app.post("/process")
 async def process_audio(background_tasks: BackgroundTasks):
@@ -156,6 +156,4 @@ async def process_audio(background_tasks: BackgroundTasks):
     print(f"Assistant: {response}")
 
     audio_io = synthesize_speech(response)
-    background_tasks.add_task(play_audio, audio_io)
     return StreamingResponse(audio_io, media_type="audio/wav")
-
