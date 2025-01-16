@@ -86,7 +86,9 @@ tokenizers==0.15.2
 torch
 torchaudio
 tqdm==4.66.2
-transformers==4.39.1
+transformers
+tokenizers
+tokenizer
 urllib3
 virtualenv
 fastapi
