@@ -1,10 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-import subprocess
 import io
 import numpy as np
 import torch
 import warnings
+import sounddevice as sd
 from transformers import AutoProcessor, BarkModel
 from tokenizers import Tokenizer
 import whisper
@@ -82,26 +82,29 @@ chain = ConversationChain(
 )
 
 # Utility Functions
-def record_audio_with_ffmpeg(output_file="recording.wav", silence_duration=3):
+def record_audio_with_sounddevice(samplerate=16000, duration=5):
     """
     Continuously records audio until silence is detected for a specified duration.
+    Uses sounddevice to record.
     """
     try:
-        command = [
-            "ffmpeg", "-y", "-f", "alsa", "-i", "default",
-            "-af", f"silencedetect=n=-30dB:d={silence_duration}",
-            output_file
-        ]
-        subprocess.run(command, check=True)
-        return output_file
-    except subprocess.CalledProcessError as e:
+        # Record audio with sounddevice
+        print("Recording... Speak into the microphone.")
+        recording = sd.rec(int(samplerate * duration), samplerate=samplerate, channels=1, dtype='int16')
+        sd.wait()
+        return recording.flatten()
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Audio recording failed: {e}")
 
-def transcribe_audio(file_path: str) -> str:
+def transcribe_audio(audio_data: np.ndarray, samplerate: int = 16000) -> str:
     """
-    Transcribes the given audio file using the Whisper model.
+    Transcribes the given audio using Whisper.
     """
     try:
+        # Temporarily save the recorded data as a WAV file to pass to Whisper
+        import soundfile as sf
+        file_path = "temp_audio.wav"
+        sf.write(file_path, audio_data, samplerate)
         result = stt.transcribe(file_path, fp16=False)
         return result["text"].strip()
     except Exception as e:
@@ -119,27 +122,40 @@ def get_llm_response(text: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM response generation failed: {e}")
 
+def play_audio(audio_array: np.ndarray, samplerate: int = 16000):
+    """
+    Play synthesized audio using sounddevice.
+    """
+    try:
+        sd.play(audio_array, samplerate)
+        sd.wait()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio playback failed: {e}")
+
 @app.post("/process")
 async def process_audio():
     """
     Processes audio from the microphone, transcribes it, generates a response, synthesizes speech,
-    and provides a StreamingResponse with the audio.
+    and plays the response audio in real-time.
     """
-    # Record audio using FFmpeg
-    audio_file = record_audio_with_ffmpeg()
+    # Record audio using sounddevice
+    audio_data = record_audio_with_sounddevice()
 
-    # Transcribe the audio file
-    text = transcribe_audio(audio_file)
+    # Transcribe the audio
+    text = transcribe_audio(audio_data)
     print(f"You: {text}")
 
     # Get LLM response
     response = get_llm_response(text)
     print(f"Assistant: {response}")
 
-    # Synthesize speech
+    # Synthesize the speech response
     sample_rate, audio_array = tts.long_form_synthesize(response)
 
-    # Prepare audio for streaming
+    # Play the audio response in real-time
+    play_audio(audio_array, sample_rate)
+
+    # Return audio response as StreamingResponse (if needed for API use)
     audio_stream = io.BytesIO()
     audio_stream.write(audio_array.astype(np.float32).tobytes())
     audio_stream.seek(0)
