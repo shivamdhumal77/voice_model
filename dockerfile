@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libportaudiocpp0 \
     fmpeg \
     build-essential \
+    alsa-utils \
+    ffmpeg \
     espeak-ng \
     libsndfile1 && \
     rm -rf /var/lib/apt/lists/*
