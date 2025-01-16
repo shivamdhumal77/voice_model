@@ -8,7 +8,6 @@ import warnings
 from transformers import AutoProcessor, BarkModel
 from tokenizers import Tokenizer
 import whisper
-import sounddevice as sd
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationChain
 from langchain.prompts import PromptTemplate
@@ -120,38 +119,33 @@ def get_llm_response(text: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM response generation failed: {e}")
 
-def play_audio(audio_array: np.ndarray, sample_rate: int):
-    """
-    Plays the audio array using sounddevice and waits for playback to complete.
-    """
-    sd.play(audio_array, samplerate=sample_rate)
-    sd.wait()
-
 @app.post("/process")
 async def process_audio():
     """
     Processes audio from the microphone, transcribes it, generates a response, synthesizes speech,
-    plays the response, and loops for conversational interaction.
+    and provides a StreamingResponse with the audio.
     """
-    while True:
-        print("Listening... Speak into the microphone.")
+    # Record audio using FFmpeg
+    audio_file = record_audio_with_ffmpeg()
 
-        # Record audio using FFmpeg
-        audio_file = record_audio_with_ffmpeg()
+    # Transcribe the audio file
+    text = transcribe_audio(audio_file)
+    print(f"You: {text}")
 
-        # Process the recorded audio
-        text = transcribe_audio(audio_file)
-        print(f"You: {text}")
+    # Get LLM response
+    response = get_llm_response(text)
+    print(f"Assistant: {response}")
 
-        # Generate response from the LLM
-        response = get_llm_response(text)
-        print(f"Assistant: {response}")
+    # Synthesize speech
+    sample_rate, audio_array = tts.long_form_synthesize(response)
 
-        # Synthesize speech from the LLM's response
-        sample_rate, audio_array = tts.long_form_synthesize(response)
+    # Prepare audio for streaming
+    audio_stream = io.BytesIO()
+    audio_stream.write(audio_array.astype(np.float32).tobytes())
+    audio_stream.seek(0)
 
-        # Play the TTS output and wait for it to finish
-        print("Playing response...")
-        play_audio(audio_array, sample_rate)
-
-        # Continue listening for the next input
+    return StreamingResponse(
+        audio_stream,
+        media_type="audio/wav",
+        headers={"Content-Disposition": "inline; filename=response.wav"}
+    )
