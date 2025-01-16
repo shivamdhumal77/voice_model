@@ -1,8 +1,8 @@
-import nltk
 import torch
 import warnings
 import numpy as np
 from transformers import AutoProcessor, BarkModel
+from tokenizers import Tokenizer
 
 warnings.filterwarnings(
     "ignore",
@@ -23,6 +23,9 @@ class TextToSpeechService:
         self.processor = AutoProcessor.from_pretrained("suno/bark-small")
         self.model = BarkModel.from_pretrained("suno/bark-small")
         self.model.to(self.device)
+
+        # Initialize the tokenizer
+        self.tokenizer = Tokenizer.from_pretrained("bert-base-uncased")
 
     def synthesize(self, text: str, voice_preset: str = "v2/en_speaker_1"):
         """
@@ -57,8 +60,11 @@ class TextToSpeechService:
             tuple: A tuple containing the sample rate and the generated audio array.
         """
         pieces = []
-        sentences = nltk.sent_tokenize(text)
         silence = np.zeros(int(0.25 * self.model.generation_config.sample_rate))
+
+        # Tokenize the text into sentences
+        tokens = self.tokenizer.encode(text)
+        sentences = tokens.tokens
 
         for sent in sentences:
             sample_rate, audio_array = self.synthesize(sent, voice_preset)
