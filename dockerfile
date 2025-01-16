@@ -41,16 +41,6 @@ RUN git clone https://github.com/suno-ai/bark /app/bark && \
     cd /app/bark && \
     pip install .
 
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    libportaudio2 \
-    libportaudiocpp0 \
-    portaudio19-dev \
-    python3-dev \
-    libasound2-dev \
-
-
 # Stage 2: Runner stage
 FROM python:3.9-slim AS runner
 
