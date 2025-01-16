@@ -34,10 +34,6 @@ RUN pip install --no-cache-dir phonemizer torch transformers scipy munch
 RUN pip install git+https://github.com/huggingface/transformers.git
 RUN git clone https://github.com/suno-ai/bark && cd bark && pip install .
 
-# Copy nltk.txt to the container
-COPY nltk.txt /app/nltk.txt
-
-# Download NLTK resources during build
 
 # Copy the application code into the container
 COPY app/ ./app
