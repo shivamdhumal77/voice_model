@@ -11,6 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libportaudiocpp0 \
     portaudio19-dev \
     python3-dev \
+    libasound2-dev \
+    portaudio19-dev \
+    libportaudio2 \
+    libportaudiocpp0 \
+    fmpeg \
     build-essential \
     espeak-ng \
     libsndfile1 && \
