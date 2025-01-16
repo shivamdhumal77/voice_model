@@ -89,4 +89,6 @@ tqdm==4.66.2
 transformers==4.39.1
 urllib3
 virtualenv
+fastapi
+uvicorn
 yarl
