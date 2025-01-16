@@ -33,7 +33,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install additional necessary Python libraries for TTS and other tasks into the virtual environment
-RUN pip install --no-cache-dir phonemizer torch transformers scipy munch
+RUN pip install --no-cache-dir phonemizer torch transformers scipy munch sounddevice
 
 # Install transformers and Bark into the virtual environment
 RUN pip install git+https://github.com/huggingface/transformers.git
