@@ -1,5 +1,5 @@
 # Stage 1: Builder stage
-FROM python:3.12.8-windowsservercore-1809 AS builder
+FROM windowsservercore-ltsc2022 AS builder
 
 # Set the working directory for the application code
 WORKDIR /app
