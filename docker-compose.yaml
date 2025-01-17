@@ -3,13 +3,23 @@ version: '3.8'
 services:
   voice_playback_app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: .  # Build the Docker image from the current directory
+      dockerfile: Dockerfile  # Use the specified Dockerfile
     ports:
       - "8000:8000"  # Map the container's port 8000 to the host's port 8000
     volumes:
-      - ./app:/app  # Map the local `app` directory to the container's `/app` directory
+      - ./app:/app:cached  # Map the local `app` directory to the container's `/app` directory with better performance
     environment:
-      # Add environment variables here, if needed
-      # Example: API_KEY=your_api_key
+      # Add GPU support for NVIDIA
+      NVIDIA_VISIBLE_DEVICES: all  # Allow access to all GPUs
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility  # Allow specific GPU capabilities
+      # Example of additional environment variables:
+      # APP_ENV: production
+      # API_KEY: your_api_key
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]  # Ensure GPU is reserved for the service
+    runtime: nvidia  # Specify NVIDIA runtime for GPU support
     command: ["uvicorn", "app.main_file:app", "--host", "0.0.0.0", "--port", "8000"]
