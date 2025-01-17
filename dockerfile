@@ -7,21 +7,24 @@ WORKDIR /app
 # Install system dependencies required for building the application
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    python3.9 \
+    python3.9-venv \
+    python3.9-dev \
     libportaudio2 \
     libportaudiocpp0 \
     portaudio19-dev \
-    python3-dev \
     libasound2-dev \
     ffmpeg \
     espeak-ng \
     libsndfile1 \
     build-essential \
-    alsa-utils \
     gcc \
-    && rm -rf /var/lib/apt/lists/*
+    && ln -sf /usr/bin/python3.9 /usr/bin/python3 && \
+    rm -rf /var/lib/apt/lists/*
 
-# Create a Python virtual environment
-RUN python3 -m venv /app/venv
+# Upgrade pip to the latest version
+RUN python3 -m venv /app/venv && \
+    /app/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Set environment variables to use the virtual environment
 ENV VIRTUAL_ENV=/app/venv
@@ -30,10 +33,10 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Copy the requirements file into the container
 COPY requirements.txt ./
 
-# Install the Python dependencies into the virtual environment
+# Install Python dependencies into the virtual environment
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install additional necessary Python libraries for TTS and other tasks into the virtual environment
+# Install additional Python libraries for TTS and audio tasks
 RUN pip install --no-cache-dir \
     phonemizer \
     torch \
@@ -43,15 +46,12 @@ RUN pip install --no-cache-dir \
     sounddevice \
     pyaudio
 
-# Install HuggingFace Transformers and Bark into the virtual environment
-RUN pip install git+https://github.com/huggingface/transformers.git && \
-    git clone https://github.com/suno-ai/bark /app/bark && \
+# Clone and install Bark into the virtual environment
+RUN git clone https://github.com/suno-ai/bark /app/bark && \
     pip install /app/bark
 
----
-
 # Stage 2: Runner stage
-FROM nvidia/cuda:12.2.0-base-ubuntu20.04 AS runner
+FROM nvidia/cuda:12.2.0-cudnn8-runtime-ubuntu20.04 AS runner
 
 # Set the working directory for the application code
 WORKDIR /app
