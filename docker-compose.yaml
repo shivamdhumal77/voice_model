@@ -10,16 +10,12 @@ services:
     volumes:
       - ./app:/app:cached  # Map the local `app` directory to the container's `/app` directory with better performance
     environment:
-      # Add GPU support for NVIDIA
-      NVIDIA_VISIBLE_DEVICES: all  # Allow access to all GPUs
-      NVIDIA_DRIVER_CAPABILITIES: compute,utility  # Allow specific GPU capabilities
       # Example of additional environment variables:
       # APP_ENV: production
       # API_KEY: your_api_key
     deploy:
       resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]  # Ensure GPU is reserved for the service
-    runtime: nvidia  # Specify NVIDIA runtime for GPU support
+        limits:
+          # Limit the container to 1 CPU
+           # Limit the container to 512 MB of memory
     command: ["uvicorn", "app.main_file:app", "--host", "0.0.0.0", "--port", "8000"]
