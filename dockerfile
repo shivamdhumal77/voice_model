@@ -1,5 +1,5 @@
 # Stage 1: Builder stage
-FROM python:3.9-slim AS builder
+FROM nvidia/cuda:12.2.0-cudnn8-devel-ubuntu20.04 AS builder
 
 # Set the working directory for the application code
 WORKDIR /app
@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     build-essential \
     alsa-utils \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a Python virtual environment
@@ -27,27 +28,30 @@ ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Copy the requirements file into the container
-COPY requirements.txt .
+COPY requirements.txt ./
 
 # Install the Python dependencies into the virtual environment
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install additional necessary Python libraries for TTS and other tasks into the virtual environment
-RUN pip install --no-cache-dir phonemizer torch transformers scipy munch sounddevice
+RUN pip install --no-cache-dir \
+    phonemizer \
+    torch \
+    transformers \
+    scipy \
+    munch \
+    sounddevice \
+    pyaudio
 
-RUN apt-get update
-RUN apt-get install libasound-dev libportaudio2 libportaudiocpp0 portaudio19-dev -y
-RUN pip install pyaudio sounddevice
-RUN apt-get install gcc -y
+# Install HuggingFace Transformers and Bark into the virtual environment
+RUN pip install git+https://github.com/huggingface/transformers.git && \
+    git clone https://github.com/suno-ai/bark /app/bark && \
+    pip install /app/bark
 
-# Install transformers and Bark into the virtual environment
-RUN pip install git+https://github.com/huggingface/transformers.git
-RUN git clone https://github.com/suno-ai/bark /app/bark && \
-    cd /app/bark && \
-    pip install .
+---
 
 # Stage 2: Runner stage
-FROM python:3.9-slim AS runner
+FROM nvidia/cuda:12.2.0-base-ubuntu20.04 AS runner
 
 # Set the working directory for the application code
 WORKDIR /app
@@ -61,6 +65,16 @@ COPY app/ ./app
 # Set environment variables to use the virtual environment
 ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Install runtime dependencies for audio
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libportaudio2 \
+    libportaudiocpp0 \
+    portaudio19-dev \
+    libasound2-dev \
+    ffmpeg \
+    espeak-ng \
+    && rm -rf /var/lib/apt/lists/*
 
 # Expose the port for FastAPI
 EXPOSE 8000
