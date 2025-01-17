@@ -1,22 +1,22 @@
-# Stage 1: Builder stage
-FROM windowsservercore-ltsc2022 AS builder
+FROM python:3.12.8-windowsservercore-1809
 
 # Set the working directory for the application code
 WORKDIR /app
 
-# Install system dependencies required for building the application
+# Install system dependencies and pipwin
 RUN powershell -Command \
     "Set-ExecutionPolicy Bypass -Scope Process -Force; \
      Invoke-WebRequest -Uri https://aka.ms/vs/17/release/vs_BuildTools.exe -OutFile vs_buildtools.exe; \
      Start-Process -Wait -FilePath vs_buildtools.exe -ArgumentList '--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools'; \
      Remove-Item vs_buildtools.exe" && \
-    pip install --upgrade pip setuptools
+    pip install --upgrade pip setuptools pipwin
 
-# Install additional dependencies for audio processing
+# Install audio dependencies using pipwin
+RUN pipwin install pyaudio \
+    && pipwin install sounddevice
+
+# Install additional dependencies
 RUN pip install \
-    pipwin \
-    sounddevice \
-    pyaudio \
     ffmpeg-python \
     phonemizer \
     torch \
@@ -32,14 +32,8 @@ RUN git clone https://github.com/suno-ai/bark /app/bark && \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Stage 2: Runner stage
-FROM python:3.12.8-windowsservercore-1809 AS runner
-
-# Set the working directory for the application code
-WORKDIR /app
-
-# Copy installed Python dependencies and application code
-COPY --from=builder /app/ /app/
+# Copy the application code into the container
+COPY app/ ./app
 
 # Expose the port for FastAPI
 EXPOSE 8000
